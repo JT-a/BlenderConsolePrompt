@@ -21,7 +21,8 @@ from .bc_utils import (
 
 from .bc_text_repr_utils import (
     do_text_glam,
-    do_text_synthax)
+    do_text_synthax,
+    do_console_rewriter)
 
 from .bc_search_utils import (
     search_blenderscripting,
@@ -177,7 +178,7 @@ def in_scene_commands(context, m):
         start = se.active_strip.frame_start
         duration = se.active_strip.frame_duration
         bpy.context.scene.frame_start = start
-        bpy.context.scene.frame_end = start + duration
+        bpy.context.scene.frame_end = start + duration - 1
 
     elif m.startswith("gif ") and (len(m) > 5):
         make_animated_gif(m[4:])
@@ -376,6 +377,27 @@ def in_core_dev_commands(context, m):
     elif m.startswith("!"):
         ''' dispatch a threaded worker '''
         cmd_controller(m[1:])
+
+    elif m.startswith('obj='):
+        do_console_rewriter(context, m)
+
+    elif m == 'git help':
+        git_strings = (
+            "git pull --all",
+            "git push --all",
+            "git add --all",
+            "git add <specify file>  # do this from inside the right directory",
+            "git commit -am \"commit message here\"",
+            "git checkout -b <branch_name>  # new_branch_name_based_on_current_branch",
+            "git branch -D <branch_name> # deletes branch locally (you must be on a different branch first)",
+            "git branch",
+            " ",
+            "-- be in master, or branch to merge into",
+            "   git merge <branch_to_merge>",
+            "   git push --all"
+        )
+        for line in git_strings:
+            add_scrollback(line, 'OUTPUT')
 
     else:
         return False
