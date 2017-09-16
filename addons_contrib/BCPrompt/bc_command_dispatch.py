@@ -16,7 +16,9 @@ from .bc_utils import (
     write_keys_textfile,
     view_types_to_console,
     make_animated_gif,
-    cmd_controller
+    make_optimized_animated_gif,
+    cmd_controller,
+    iterate_spaces
 )
 
 from .bc_text_repr_utils import (
@@ -41,7 +43,11 @@ from .bc_scene_utils import (
     distance_check,
     align_view_to_3dcursor,
     parent_selected_to_new_empty,
-    add_mesh_2_json
+    add_mesh_2_json,
+    crop_to_active,
+    v2rdim,
+    render_to_filepath,
+    process_size_query
 )
 
 from .bc_update_utils import (
@@ -53,6 +59,12 @@ from .bc_update_utils import (
 from .bc_CAD_utils import (
     perform_face_intersection,
     do_bix2
+)
+
+from .bc_theme_utils import (
+    set_nodewhite,
+    set_3de,
+    set_theme
 )
 
 from .bc_operator_loaders import run_operator_register
@@ -147,41 +159,30 @@ def in_scene_commands(context, m):
         add_mesh_2_json('yup')
         add_scrollback('added mesh 2 json (y up) script to text editor! remember to triangulate first', 'OUTPUT')
 
-    elif m.startswith('v2rdim'):
-        SCN = bpy.context.scene
-        SE = SCN.sequence_editor
-
-        if m == 'v2rdim':
-            sequence = SE.active_strip
-        elif m.startswith('v2rdim '):
-            vidname = m[7:]
-            sequence = SE.sequences.get(vidname)
-            if not sequence:
-                print(vidname, 'is not a sequence - check the spelling')
-                return True
-
-        def get_size(sequence):
-            clips = bpy.data.movieclips
-            fp = sequence.filepath
-            mv = clips.load(fp)
-            x, y = mv.size[:]
-            clips.remove(mv)
-            return x, y
-
-        x, y = get_size(sequence)
-        SCN.render.resolution_x = x
-        SCN.render.resolution_y = y
-        SCN.render.resolution_percentage = 100
+    elif m == 'v2rdim':
+        v2rdim()
 
     elif m in {'crop to active', 'cta'}:
-        se = bpy.context.scene.sequence_editor
-        start = se.active_strip.frame_start
-        duration = se.active_strip.frame_duration
-        bpy.context.scene.frame_start = start
-        bpy.context.scene.frame_end = start + duration - 1
+        crop_to_active()
+
+    elif m == 'dandc':
+        v2rdim()
+        crop_to_active()
+        add_scrollback('set render dims and cropped timeline', 'OUTPUT')
+
+    elif m.startswith('anim '):
+        fp = m[5:]
+        add_scrollback('going to render to ' + fp, 'OUTPUT')
+        render_to_filepath(fp)
 
     elif m.startswith("gif ") and (len(m) > 5):
         make_animated_gif(m[4:])
+
+    elif m.startswith("ogif ") and (len(m) > 6):
+        make_optimized_animated_gif(m[5:])
+
+    elif m.startswith('sizeof'):
+        process_size_query(m)
 
     elif m == 'sel lights':
         for o in bpy.data.objects:
@@ -214,6 +215,20 @@ def in_scene_commands(context, m):
             msg = 'no objects selected to parent to'
             output_type = 'ERROR'
         add_scrollback(msg, output_type)
+
+    elif m == 'bright':
+        set_theme(context, 'theme_3')
+        set_nodewhite(context, '')
+        set_3de(context, '')
+
+    elif m in {'nodeview white', 'nv white', 'nv111'}:
+        set_nodewhite(context, '')
+
+    elif m.startswith('theme') and '_' in m and len(m) > 6:
+        set_theme(context, m)        
+
+    elif m in {'3dv easy', '3de', 'sde'}:
+        set_3de(context, '')
 
     else:
         return False
@@ -378,26 +393,45 @@ def in_core_dev_commands(context, m):
         ''' dispatch a threaded worker '''
         cmd_controller(m[1:])
 
-    elif m.startswith('obj='):
+    elif m.startswith('obj=') or m.startswith('n=') or m.startswith('-fem'):
         do_console_rewriter(context, m)
 
     elif m == 'git help':
         git_strings = (
-            "git pull --all",
-            "git push --all",
-            "git add --all",
+            "git pull (--all)",
+            "git push (--all)",
+            "git add (--all)",
             "git add <specify file>  # do this from inside the right directory",
             "git commit -am \"commit message here\"",
             "git checkout -b <branch_name>  # new_branch_name_based_on_current_branch",
             "git branch -D <branch_name> # deletes branch locally (you must be on a different branch first)",
             "git branch",
-            " ",
+            "   ",
             "-- be in master, or branch to merge into",
             "   git merge <branch_to_merge>",
-            "   git push --all"
+            "   git push --all",
+            "   ",
+            "   ",
+            "To reset unstaged things..:",
+            "  git fetch origin",
+            "  git reset --hard origin/master",
+            "  git clean -f"
         )
         for line in git_strings:
             add_scrollback(line, 'OUTPUT')
+
+    elif m.startswith('aft;'):
+        newstr = m[4:]
+        if newstr:
+            # get active tree, and active node, make sure it's a FrameNode
+            def behaviour(nodeview):
+                tree = nodeview.edit_tree
+                nodes = tree.nodes
+                node = nodes.active
+                if node and node.bl_idname == 'NodeFrame':
+                    node.label = newstr
+
+            iterate_spaces('NODE_EDITOR', behaviour)
 
     else:
         return False
